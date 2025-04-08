@@ -8,7 +8,7 @@
 
 root_dir=/data/bt/hw_multi/cls2_jg_v0.4_shangang4-2_20231116
 img_dir=${root_dir}/images
-voc_anno_dir=${root_dir}/voc_labels
+voc_anno_dir=${root_dir}/Annotations
 voc_anno_list=${root_dir}/trainval
 voc_label_list=${voc_anno_list}/label_list.txt
 

@@ -82,7 +82,11 @@ def split_dota(dota_root_path: str, ratio: list = [0.8, 0.2, 0]):
         label_test_path.mkdir(parents=True, exist_ok=True)
 
     # Get list of all image files and shuffle them for random splitting
-    images = list(dota_image_path.glob("*.jpg"))  # Adjust if the images have different extensions
+    extensions = ["*.jpg", "*.jpeg", "*.JGP", "*.JPEG", "*.png", "*.PNG", 
+                  "*.bmp", "*.BMP", "*.dng", "*.mpo", "*.tif", "*.tiff", "*.webp", "*.pfm"]
+    images = []
+    for ext in extensions:
+        images.extend(dota_image_path.glob(ext))
     random.shuffle(images)
 
     # Calculate the number of images for each split

@@ -26,7 +26,7 @@ dataset
 │    ├─ 3.jpg
 │    ├─ ...
 │    └─ 1000.jpg
-└─ voc_labels
+└─ Annotations
     ├─ 1.xml
     ├─ 2.xml
     ├─ 3.xml
@@ -39,15 +39,24 @@ dataset
 使用[voc2yolo.py](./voc2yolo.py)将voc数据集转为yolo格式：
 ```
 python dataset_utils/voc2yolo.py \
-    ${class1} ${class2} ${class3} ... \
+    --voc_label_list ${voc_label_list} \
     --xml-dir ${voc_anno_dir}
 ```
 参数说明：
-* class1,class2,...: 数据集的类别名，顺序需要和id对应
+* voc_label_list: 数据集的类别txt文件，每行一个类别，顺序和定义保持一致。
 * xml-dir: 存放voc标签的路径
-eg. 数据集有`person`,`car`,`trunk`三类(标签id分别为0,1,2)，voc格式的标签地址为`/dataset/voc_labels`：
+
+eg. 数据集有`person`,`car`,`trunk`三类(标签id分别为0,1,2)，那么 voc_label_list 的文件应该为：
 ```
-python dataset_utils/voc2yolo.py person car trunk --xml-dir /dataset/voc_labels
+person
+car
+trunk
+```
+
+voc格式的标签地址为`/dataset/Annotations`，执行命令：
+
+```
+python dataset_utils/voc2yolo.py person car trunk --xml-dir /dataset/Annotations
 ```
 最后生成txt格式的yolo标签，会默认保存在`/dataset/labels`，即voc标签同级目录下的`labels`文件夹，现在数据集文件结构为：
 ```
@@ -64,7 +73,7 @@ dataset
 │    ├─ 3.txt
 │    ├─ ...
 │    └─ 1000.txt
-└─ voc_labels
+└─ Annotations
     ├─ 1.xml
     ├─ 2.xml
     ├─ 3.xml
@@ -109,7 +118,7 @@ dataset
     │    ├─ train_stem_.txt
     │    ├─ val.txt
     │    └─ val_stem.txt
-    └─ voc_labels
+    └─ Annotations
         ├─ 1.xml
         ├─ 2.xml
         ├─ 3.xml
@@ -166,7 +175,7 @@ dataset
     │    ├─ val.json
     │    ├─ val.txt
     │    └─ val_stem.txt
-    └─ voc_labels
+    └─ Annotations
         ├─ 1.xml
         ├─ 2.xml
         ├─ 3.xml
@@ -185,12 +194,12 @@ yolo格式的训练集和验证集会以`train.txt`和`val.txt`保存，coco格�
 首先运行[voc2xyxy.py](./voc2xyxy.py)获得当前验证集的Ground Truths：
 ```
 python dataset_utils/voc2xyxy.py \
-    ${class1} ${class2} ${class3} ... \
+    --voc_label_list ${voc_label_list} \
     --xml-dir ${voc_anno_dir} \
     --val-list ${voc_ann_list}/val_stem.txt
 ```
 参数说明：
-* class1,class2,...: 数据集的类别名，顺序需要和id对应
+* voc_label_list: 数据集的类别txt文件，每行一个类别，顺序和定义保持一致。
 * xml-dir: 存放voc标签的路径
 * val-list: 仅包含验证集图片名(不含文件后缀)的txt文件，即步骤3中生成的`val_stem.txt`
 
@@ -224,7 +233,7 @@ dataset
 │    ├─ val.json
 │    ├─ val.txt
 │    └─ val_stem.txt
-└─ voc_labels
+└─ Annotations
     ├─ 1.xml
     ├─ 2.xml
     ├─ 3.xml
