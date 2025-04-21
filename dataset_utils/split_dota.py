@@ -91,24 +91,19 @@ def split_dota(dota_root_path: str, ratio: list = [0.8, 0.2, 0]):
 
     # Calculate the number of images for each split
     total_images = len(images)
-    train_count = int(total_images * ratio[0])
-    val_count = int(total_images * ratio[1])
-    test_count = total_images - train_count - val_count
-
-    # Adjust train_count or val_count if test_count < 0
-    if test_count < 0:
-        val_count += test_count  # Reduce val_count to ensure total = total_images
+    if ratio[2] == 0:
+        train_count = int(total_images * ratio[0])
+        train_images = images[:train_count]
+        val_images = images[train_count:]
+        val_count = len(val_images)
+        test_images = []
         test_count = 0
-
-    # Ensure no image is left unallocated
-    allocated_count = train_count + val_count + test_count
-    if allocated_count < total_images:
-        train_count += total_images - allocated_count
-    
-    # Split images into train, val, and test sets
-    train_images = images[:train_count]
-    val_images = images[train_count:train_count + val_count]
-    test_images = images[train_count + val_count:] if ratio[2] > 0 else []
+    else:
+        train_count = int(total_images * ratio[0])
+        val_count = int(total_images * ratio[1])
+        val_images = images[train_count:train_count + val_count]
+        test_images = images[train_count + val_count:]
+        test_count = len(test_images)
 
     # Function to move files
     def move_files(image_list, image_dest, label_dest):
