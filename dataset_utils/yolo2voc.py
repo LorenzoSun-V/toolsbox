@@ -10,7 +10,7 @@ import argparse
 import os
 import cv2
 from xml.dom.minidom import parseString
-from lxml.etree import Element, SubElement, tostring
+from xml.etree import Element, SubElement, tostring
 import numpy as np
 from os.path import join
 from tqdm import tqdm

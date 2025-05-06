@@ -11,6 +11,7 @@ from os.path import join
 import argparse
 from glob import glob
 from tqdm import tqdm
+import shutil
 
 
 def convert(size, box):
@@ -84,7 +85,9 @@ def main():
     save_dir = join(root_path, "labels")
     if not os.path.exists(save_dir): os.makedirs(save_dir, exist_ok=True)
 
-    os.system(f"mv -v {args.xml_dir}/*.txt {save_dir}")
+    txt_files = [f for f in os.listdir(args.xml_dir) if f.endswith('.txt')]
+    for txt_file in tqdm(txt_files):
+        shutil.move(os.path.join(args.xml_dir, txt_file), os.path.join(save_dir, txt_file))
 
 
 if __name__ == '__main__':

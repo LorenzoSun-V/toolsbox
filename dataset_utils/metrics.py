@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 from tqdm import tqdm
-from utils import *
+from dataset_utils.utils import *
 
 
 class Metric:

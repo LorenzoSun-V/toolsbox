@@ -11,6 +11,7 @@ from os.path import join
 import argparse
 from glob import glob
 from tqdm import tqdm
+import shutil
 
 
 def convert_annotation(image_id, classes):
@@ -74,8 +75,10 @@ def main():
     print(root_path)
     save_dir = join(root_path, "gts")
     if not os.path.exists(save_dir): os.makedirs(save_dir, exist_ok=True)
-    print(f"mv {args.xml_dir}/*.txt {save_dir}")
-    os.system(f"mv {args.xml_dir}/*.txt {save_dir}")
+
+    txt_files = [f for f in os.listdir(args.xml_dir) if f.endswith('.txt')]
+    for txt_file in tqdm(txt_files):
+        shutil.move(os.path.join(args.xml_dir, txt_file), os.path.join(save_dir, txt_file))
 
 
 if __name__ == '__main__':
