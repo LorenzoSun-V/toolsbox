@@ -8,10 +8,12 @@ Description:
 import xml.etree.ElementTree as ET
 import os
 from os.path import join
+from pathlib import Path
 import argparse
 from glob import glob
 from tqdm import tqdm
 import shutil
+from utils import load_classes
 
 
 def convert_annotation(image_id, classes):
@@ -55,12 +57,11 @@ def convert_annotation(image_id, classes):
 
 def main():
     parser = argparse.ArgumentParser(description="create classes")
-    parser.add_argument('--voc_label_list', help='In Voc format dataset, path to label list. The content of each line is a category.', type=str, default=None)
+    parser.add_argument('--voc-label-list', help='In Voc format dataset, path to label list. The content of each line is a category.', type=Path, default=None)
     parser.add_argument('--val-list', type=str, help='val_stem set list')
     parser.add_argument('--xml-dir', type=str, help='which classes to do xml2yolo')
     args = parser.parse_args()
-    with open(args.voc_label_list, 'r') as f:
-        classes = f.read().split()
+    classes = load_classes(args.voc_label_list)
 
     root_path = args.xml_dir
     with open(args.val_list, 'r') as f:

@@ -562,7 +562,23 @@ class OBBValidator(DetValidator):
         iou = batch_probiou(labels[:, 1:], detections[:, :5])  # Calculate IoU between ground truth and predictions
         return self.match_predictions(detections[:, -1], labels[:, 0], iou)
     
-    def _read_txt2tensor(self, txt_path):
+    def _read_txt2tensor_gts(self, txt_path):
+        res = []
+        if osp.exists(txt_path):
+            with open(txt_path, 'r') as f:
+                for line in f.read().strip().splitlines():
+                    parts = line.strip().split()
+                    # 如果有多余的注释，跳过该行，只读取标注信息
+                    if len(parts) < 9:
+                        continue
+                    cls_name = parts[8]
+                    class_idx = list(self.names.keys())[list(self.names.values()).index(cls_name)]
+                    coords = [float(p) for p in parts[:8]]
+                    r = coords + [class_idx]
+                    res.append(r)
+        return torch.Tensor(res).to(self.device)
+    
+    def _read_txt2tensor_preds(self, txt_path):
         res = []
         if osp.exists(txt_path):
             with open(txt_path, 'r') as f:
@@ -600,10 +616,10 @@ class OBBValidator(DetValidator):
             for img_path in img_paths:
                 img_name = osp.basename(img_path.strip()).rsplit('.', 1)[0]
                 self.img_name.append(img_name)
-                pred_dict[img_name] = self._read_txt2tensor(osp.join(pred_path, f"{img_name}.txt"))
+                pred_dict[img_name] = self._read_txt2tensor_preds(osp.join(pred_path, f"{img_name}.txt"))
 
                 # 读取GT数据并转换为xywhr格式
-                gt_tensor = self._read_txt2tensor(osp.join(gt_path, f"{img_name}.txt"))
+                gt_tensor = self._read_txt2tensor_gts(osp.join(gt_path, f"{img_name}.txt"))
                 if len(gt_tensor)==0:
                     # 如果没有GT数据，则略过索引读取，直接把空列表赋值给gt_dict
                     gt_dict[img_name] = gt_tensor
@@ -816,35 +832,3 @@ class SegmentValidator(DetValidator):
                 gt_dict[img_name] = self._read_txt2tensor_gt(osp.join(gt_path, f"{img_name}.txt"), (h,w))
         print('Loading done!')
         return pred_dict, gt_dict
-
-
-if __name__ == "__main__":
-    # OBB 精度计算示例
-    # obbval = OBBValidator(
-    #     pred_path="/data/bt/hw_obb/cls2_hw_obb_v0.1/images/val_output",
-    #     gt_path="/data/bt/hw_obb/cls2_hw_obb_v0.1/labels/val_original",
-    #     val_list_path="/data/bt/hw_obb/cls2_hw_obb_v0.1/val.txt",
-    #     names={0:'SL', 1:'MS'}) 
-    # obbval.cal_metrics()
-
-    # HBB 精度计算示例
-    # detval = DetValidator(
-    #     pred_path="/lorenzo/bt_repo/ultralytics/runs/detect/val2/labels",
-    #     gt_path="/data/bt/xray/cls13_xray-sub_v1.0/gts",
-    #     val_list_path="/data/bt/xray/cls13_xray-sub_v1.0/trainval/val.txt",
-    #     names={0:'embedding_gs', 1: 'fracture_gs', 2: 'fall_gs', 3: 'damage_gs', 4: 'rust_gs', 5: 'embedding_fl', 
-    #            6: 'fracture_fl', 7: 'glue_fl', 8: 'scratch_fl', 9: 'fall_fl', 10: 'brokenlen_gs', 11: 'fracture_full_gs', 12: 'rust_full_gs'})
-    # detval.cal_metrics()
-
-    # InstanceSegment 精度计算示例
-    names = {}
-    for i in range(80):
-        names[i] = str(i)
-    root_path = "/data/Datasets/public/coco_instanceseg"
-    root_path = "/data/Datasets/public/coco_instanceseg/mini-test"
-    segval = SegmentValidator(
-        pred_path="/data/Datasets/public/coco_instanceseg/mini-test/images/output",
-        gt_path=f"{root_path}/labels",
-        val_list_path=f"{root_path}/val.txt",
-        names=names)
-    segval.cal_metrics()

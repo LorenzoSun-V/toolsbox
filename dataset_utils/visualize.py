@@ -14,6 +14,7 @@ import shutil
 from tqdm import tqdm
 from glob import glob
 import xml.etree.ElementTree as ET
+from dataset_utils.utils import load_classes
 
 
 class Visualizer:
@@ -47,7 +48,12 @@ class Visualizer:
                         (166, 74, 118), (219, 142, 185), (79, 210, 114), (178, 90, 62),
                         (65, 70, 15), (127, 167, 115), (59, 105, 106), (142, 108, 45),
                         (196, 172, 0), (95, 54, 80), (128, 76, 255), (201, 57, 1),
-                        (246, 0, 122), (191, 162, 208)]
+                        (246, 0, 122), (191, 162, 208),(216, 75, 75), (216, 118, 75), 
+                        (216, 160, 75), (216, 202, 75), (188, 216, 75), (146, 216, 75), 
+                        (104, 216, 75), (62, 216, 75), (75, 216, 118), (75, 216, 160), 
+                        (75, 216, 202), (75, 188, 216), (75, 146, 216), (75, 104, 216), 
+                        (75, 62, 216), (118, 75, 216), (160, 75, 216), (202, 75, 216), 
+                        (216, 75, 202), (216, 75, 160)]
 
     def vis_coco_style(self, json_file: str) -> None:
         """
@@ -173,12 +179,15 @@ class Visualizer:
         """
         return img
     
-    def vis_voc_style(self, annot_folder: str) -> None:
+    def vis_voc_style(self, annot_folder: str, label_list_dir: str) -> None:
         """
         该函数用于可视化VOC格式的数据集，可视化结果保存在vis_dir/voc文件夹下
         Args:
             annot_folder (str): VOC格式的annotation文件夹路径（XML文件）
         """
+        assert osp.exists(label_list_dir), "label_list_dir not exists!"
+        label_list = load_classes(Path(label_list_dir))
+
         (Path(self.vis_dir) / "voc").mkdir(parents=True, exist_ok=True)
         img_list = sorted(glob(osp.join(self.img_dir, "*.[jJ][pP][gG]*"))+glob(osp.join(self.img_dir, "*.[jJ][pP][eE][gG]*"))+glob(osp.join(self.img_dir, "*.[pP][nN][gG]*")))
 
@@ -208,27 +217,9 @@ class Visualizer:
                 ymax = int(bbox.find('ymax').text)
                 # 获取类别的颜色索引（根据需求可以进行扩展）
                 label = name
-                label_idx = self._get_label_index(label)
+                label_idx = label_list.index(label)
                 cv2.rectangle(img, (xmin, ymin), (xmax, ymax), self.pattle[label_idx], 2)
                 cv2.putText(img, label, (xmin, ymin-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, self.pattle[label_idx], 2)
 
             # 保存可视化结果
             cv2.imwrite(osp.join(self.vis_dir, "voc", f"{file_name}.jpg"), img)
-
-    def _get_label_index(self, label: str) -> int:
-        """
-        Helper function to map the label name to an index for color palette.
-        Args:
-            label (str): The object label name
-        Returns:
-            int: The index for the color palette
-        """
-        # In this example, the labels are mapped to colors via index.
-        # Modify this function to fit the actual label to index mapping.
-        # For simplicity, assume that there are 20 classes.
-        label_list = ["person", "headshoulder", ""]
-        if label in label_list:
-            return label_list.index(label)
-        else:
-            assert False, "Label not found in the label list"
-            return 0  # Default to class 0 if label not found

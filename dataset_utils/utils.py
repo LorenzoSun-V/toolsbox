@@ -12,6 +12,10 @@ import numpy as np
 import cv2
 
 
+def load_classes(label_list: Path) -> list:
+    return label_list.read_text(encoding='utf-8').splitlines()
+
+
 def smooth(y, f=0.05):
     """Box filter of fraction f."""
     nf = round(len(y) * f * 2) // 2 + 1  # number of filter elements (must be odd)
