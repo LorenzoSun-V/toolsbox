@@ -10,6 +10,7 @@ import argparse
 from pathlib import Path
 import cv2
 from ultralytics.utils import DATASETS_DIR, LOGGER, NUM_THREADS, TQDM
+from utils import load_classes
 
 
 def convert_dota_to_yolo_obb(dota_root_path: str, class_mapping=None):
@@ -72,7 +73,7 @@ def convert_dota_to_yolo_obb(dota_root_path: str, class_mapping=None):
             "helipad": 17,
         }
     elif not isinstance(class_mapping, dict):
-        raise TypeError("class_mapping must be a dictionary like: \{'plane': 0, 'ship': 1 \}.")
+        raise TypeError("class_mapping must be a dictionary like: {'plane': 0, 'ship': 1 }.")
 
     def convert_label(image_name, image_width, image_height, orig_label_dir, save_dir):
         """Converts a single image's DOTA annotation to YOLO OBB format and saves it to a specified directory."""
@@ -128,10 +129,12 @@ def convert_dota_to_yolo_obb(dota_root_path: str, class_mapping=None):
 
 def main():
     parser = argparse.ArgumentParser(description="DOTA to YOLO OBB converter")
-    parser.add_argument('classes', nargs='+', help='which classes to do DOTA2YOLO')
+    # parser.add_argument('classes', nargs='+', help='which classes to do DOTA2YOLO')
+    parser.add_argument('label_list', help='path to label list. The content of each line is a category.', type=Path, default=None)
     parser.add_argument('--data', type=str, help='path of DOTA dataset')
     args = parser.parse_args()
-    class_mapping = {class_name: i for i, class_name in enumerate(args.classes)}
+    classes = load_classes(args.label_list)
+    class_mapping = {class_name: i for i, class_name in enumerate(classes)}
     convert_dota_to_yolo_obb(args.data, class_mapping)
 
 
