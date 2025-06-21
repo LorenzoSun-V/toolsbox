@@ -282,10 +282,10 @@ dataset
 
 #### 2. 划分训练、验证和测试集
 
-使用[split.py](./split.py)划分训练集、验证集和测试集：
+使用[split_dota.py](./split_dota.py)划分训练集、验证集和测试集：
 
 ```
-python dataset_utils/split.py \
+python dataset_utils/split_dota.py \
     --data ${root_dir} \
     --ratio 0.8 0.2 0
 ```
@@ -312,12 +312,12 @@ dataset
 
 ```
 python dataset_utils/dota2yolobb.py \
-    ${classes} \
+    ${label_list} \
     --data ${root_dir}
 ```
 
 参数说明：
-* --classes: 数据集的类别
+* label_list: 数据集类别txt文件，每行一个类别，顺序和定义保持一致。
 * --data: 数据集根目录
 
 执行完后，目录结构为，train和val分别存放着YOLO-OBB格式的标签：

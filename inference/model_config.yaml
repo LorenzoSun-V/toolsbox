@@ -1,0 +1,6 @@
+input_img_dir: /data/lorenzo/datasets/temp/images
+models:
+  - model_path: /data/lorenzo/nofar/Detection/model_version/model8_b32m_20250619_hbb_cls10_action_v0.5.8.bin
+    class_names: ["fire", "smoke", "person", "nomask", "smoking", "nowf", "fall", "sleep", "tx", "wsf"]
+  - model_path: /data/lorenzo/nofar/Detection/model_version/model8_b32m_20250620_fire_smoke_v0.1.bin
+    class_names: ["fire", "smoke"]
