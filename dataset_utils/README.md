@@ -15,9 +15,14 @@
 
 ### HBB数据集Pipeline
 
+<details>
+<summary>HBB数据集Pipeline</summary>
+
+#### 整体流程案例可以参考[hbb_create_example.sh](../examples/hbb_create_example.sh)，以下为详细解释。
+
 #### 1. 标注数据集
 
-根据标注规范，使用labelImg工具标注，导出的数据集为voc格式，请确保数据集文件结构为：
+根据标注规范，使用`X-AnyLabeling`工具标注，导出的数据集为voc格式，请确保数据集文件结构为：
 ```
 dataset
 ├─ images
@@ -39,12 +44,12 @@ dataset
 使用[voc2yolo.py](./voc2yolo.py)将voc数据集转为yolo格式：
 ```
 python dataset_utils/voc2yolo.py \
-    --voc_label_list ${voc_label_list} \
+    --voc-label-list ${voc_label_list} \
     --xml-dir ${voc_anno_dir}
 ```
 参数说明：
-* voc_label_list: 数据集的类别txt文件，每行一个类别，顺序和定义保持一致。
-* xml-dir: 存放voc标签的路径
+* voc-label-list: 数据集的类别txt文件，每行一个类别，顺序和定义保持一致。
+* xml-dir: 存放voc标签的路径。
 
 eg. 数据集有`person`,`car`,`trunk`三类(标签id分别为0,1,2)，那么 voc_label_list 的文件应该为：
 ```
@@ -53,11 +58,6 @@ car
 trunk
 ```
 
-voc格式的标签地址为`/dataset/Annotations`，执行命令：
-
-```
-python dataset_utils/voc2yolo.py person car trunk --xml-dir /dataset/Annotations
-```
 最后生成txt格式的yolo标签，会默认保存在`/dataset/labels`，即voc标签同级目录下的`labels`文件夹，现在数据集文件结构为：
 ```
 dataset
@@ -81,125 +81,129 @@ dataset
     └─ 1000.xml
 ```
 
-#### 3. voc2coco
+#### 3. 划分训练集和验证集
 
-这一步操作会将voc数据集转为coco格式，同时会*划分yolo和coco两种格式的训练集和验证集*，划分会保证两种格式的训练集和验证集图片保持一致。</br>
-1. 使用[create_voc.py](./create_voc.py)划分训练集和验证集：
-    ```
-    python dataset_utils/create_voc.py \
-        --img_dir ${img_dir} \
-        --voc_anno_dir  ${voc_anno_dir} \
-        --voc_anno_list ${voc_anno_list} \
-        --train_proportion 0.9
-    ```
-    参数说明：
-    * --img_dir: 图像路径，用于划分yolo格式的训练集和验证集时，在图像名前加上绝对路径
-    * --voc_anno_dir: 存放voc标签的路径，和步骤2中的`--xml-dir`相同
-    * --voc_ann_list: 存放划分训练集和验证集文件的路径
-    * --train_proportion: 训练集占图像的比例
+使用[create_voc.py](./create_voc.py)划分训练集和验证集：
+```
+python dataset_utils/create_voc.py \
+    --img_dir ${img_dir} \
+    --voc_anno_dir  ${voc_anno_dir} \
+    --voc_anno_list ${voc_anno_list} \
+    --train_proportion 0.9
+```
+参数说明：
+* --img_dir: 图像路径，用于划分yolo格式的训练集和验证集时，在图像名前加上绝对路径
+* --voc_anno_dir: 存放voc标签的路径，和步骤2中的`--xml-dir`相同
+* --voc_ann_list: 存放划分训练集和验证集文件的路径
+* --train_proportion: 训练集占图像的比例
 
-    假设`--voc_anno_list /dataset/trainval`，该步骤完成，数据集文件结构为（在`/dataset/trainval`文件夹中新增了训练集和验证集的划分）：
-    ```
-    dataset
-    ├─ images
-    │    ├─ 1.jpg
-    │    ├─ 2.jpg
-    │    ├─ 3.jpg
-    │    ├─ ...
-    │    └─ 1000.jpg
-    ├─ labels
-    │    ├─ 1.txt
-    │    ├─ 2.txt
-    │    ├─ 3.txt
-    │    ├─ ...
-    │    └─ 1000.txt
-    ├─ trainval
-    │    ├─ train.txt
-    │    ├─ train_stem_.txt
-    │    ├─ val.txt
-    │    └─ val_stem.txt
-    └─ Annotations
-        ├─ 1.xml
-        ├─ 2.xml
-        ├─ 3.xml
-        ├─ ...
-        └─ 1000.xml
-    ```
-    `train.txt`和`val.txt`是yolo格式的训练集和验证集划分，文件中是图片的绝对路径；`train_stem.txt`和`val_stem.txt`只有不包含路径和文件后缀的文件名，在后面的步骤会用到。
+假设`--voc_anno_list /dataset/trainval`，该步骤完成，数据集文件结构为（在`/dataset/trainval`文件夹中新增了训练集和验证集的划分）：
+```
+dataset
+├─ images
+│    ├─ 1.jpg
+│    ├─ 2.jpg
+│    ├─ 3.jpg
+│    ├─ ...
+│    └─ 1000.jpg
+├─ labels
+│    ├─ 1.txt
+│    ├─ 2.txt
+│    ├─ 3.txt
+│    ├─ ...
+│    └─ 1000.txt
+├─ trainval
+│    ├─ train.txt
+│    ├─ train_stem_.txt
+│    ├─ val.txt
+│    └─ val_stem.txt
+└─ Annotations
+    ├─ 1.xml
+    ├─ 2.xml
+    ├─ 3.xml
+    ├─ ...
+    └─ 1000.xml
+```
+`train.txt`和`val.txt`是yolo格式的训练集和验证集划分，文件中是图片的绝对路径；`train_stem.txt`和`val_stem.txt`只有不包含路径和文件后缀的文件名，在转coco标签时会用到。
 
-2. 创建数据集的类别文件（每行保存一个类别名称，以txt文件保存）后，使用[x2coco.py](./x2coco.py)将voc转为coco：
-    ```
-    python dataset_utils/x2coco.py \
-        --dataset_type voc \
-        --voc_anno_dir ${voc_anno_dir} \
-        --voc_anno_list ${voc_anno_list}/train_stem.txt \
-        --voc_label_list ${voc_label_list} \
-        --output_dir ${voc_anno_list} \
-        --voc_out_name train.json
+#### 4. voc2coco
 
-    python dataset_utils/x2coco.py \
-        --dataset_type voc \
-        --voc_anno_dir ${voc_anno_dir} \
-        --voc_anno_list ${voc_anno_list}/val_stem.txt \
-        --voc_label_list ${voc_label_list} \
-        --output_dir ${voc_anno_list} \
-        --voc_out_name val.json
-    ```
-    参数说明：
-    * --voc_anno_dir: 存放voc标签的路径
-    * --voc_anno_list: 仅包含文件名(不含文件后缀)的txt文件
-    * --voc_label_list: 数据集的类别文件，每行保存一个类别名称，以txt文件保存
-    * --output_dir: 存放划分训练集和验证集文件的路径
-    * --voc_out_name
+如果无需coco格式的标签，可以跳过此步骤。
 
-    假设`--output_dir /dataset/trainval`，`--voc_label_list /dataset/label_list.txt`，该步骤完成，数据集文件结构为（在`/dataset/trainval`文件夹中新增了coco格式的训练集和验证集）：
-    ```
-    dataset
-    ├─ images
-    │    ├─ 1.jpg
-    │    ├─ 2.jpg
-    │    ├─ 3.jpg
-    │    ├─ ...
-    │    └─ 1000.jpg
-    ├─ labels
-    │    ├─ 1.txt
-    │    ├─ 2.txt
-    │    ├─ 3.txt
-    │    ├─ ...
-    │    └─ 1000.txt
-    ├─ trainval
-    │    ├─ label_list.txt
-    │    ├─ train.json
-    │    ├─ train.txt
-    │    ├─ train_stem_.txt
-    │    ├─ val.json
-    │    ├─ val.txt
-    │    └─ val_stem.txt
-    └─ Annotations
-        ├─ 1.xml
-        ├─ 2.xml
-        ├─ 3.xml
-        ├─ ...
-        └─ 1000.xml
-    ```
+创建数据集的类别文件（每行保存一个类别名称，以txt文件保存）后，使用[x2coco.py](./x2coco.py)将voc转为coco：
 
-yolo格式的训练集和验证集会以`train.txt`和`val.txt`保存，coco格式的训练集和验证集会以`train.json`和`val.json`保存。
-以上步骤脚本，可以参考[create_voc2coco.sh](../create_voc2coco.sh)
+```
+python dataset_utils/x2coco.py \
+    --dataset_type voc \
+    --voc_anno_dir ${voc_anno_dir} \
+    --voc_anno_list ${voc_anno_list}/train_stem.txt \
+    --voc_label_list ${voc_label_list} \
+    --output_dir ${voc_anno_list} \
+    --voc_out_name train.json
 
-#### 4. visualize
+python dataset_utils/x2coco.py \
+    --dataset_type voc \
+    --voc_anno_dir ${voc_anno_dir} \
+    --voc_anno_list ${voc_anno_list}/val_stem.txt \
+    --voc_label_list ${voc_label_list} \
+    --output_dir ${voc_anno_list} \
+    --voc_out_name val.json
+```
+参数说明：
+* --voc_anno_dir: 存放voc标签的路径
+* --voc_anno_list: 仅包含文件名(不含文件后缀)的txt文件
+* --voc_label_list: 数据集的类别文件，每行保存一个类别名称，以txt文件保存
+* --output_dir: 存放划分训练集和验证集文件的路径
+* --voc_out_name
+
+假设`--output_dir /dataset/trainval`，`--voc_label_list /dataset/label_list.txt`，该步骤完成，数据集文件结构为（在`/dataset/trainval`文件夹中新增了coco格式的训练集和验证集）：
+```
+dataset
+├─ images
+│    ├─ 1.jpg
+│    ├─ 2.jpg
+│    ├─ 3.jpg
+│    ├─ ...
+│    └─ 1000.jpg
+├─ labels
+│    ├─ 1.txt
+│    ├─ 2.txt
+│    ├─ 3.txt
+│    ├─ ...
+│    └─ 1000.txt
+├─ trainval
+│    ├─ label_list.txt
+│    ├─ train.json
+│    ├─ train.txt
+│    ├─ train_stem_.txt
+│    ├─ val.json
+│    ├─ val.txt
+│    └─ val_stem.txt
+└─ Annotations
+    ├─ 1.xml
+    ├─ 2.xml
+    ├─ 3.xml
+    ├─ ...
+    └─ 1000.xml
+```
+
+coco格式的训练集和验证集会以`train.json`和`val.json`保存。
+
+#### 5. visualize
+
 如果按照以上步骤生成了数据集，可以使用`Visualizer`可视化数据集。具体教程可参考[examples](../dataset_utils_example.ipynb)。
 
+#### 6. 生成符合规则的Ground Truths
 
-#### 5. calculate metrics
-首先运行[voc2xyxy.py](./voc2xyxy.py)获得当前验证集的Ground Truths：
+运行[voc2xyxy.py](./voc2xyxy.py)获得当前验证集的Ground Truths：
 ```
 python dataset_utils/voc2xyxy.py \
-    --voc_label_list ${voc_label_list} \
+    --voc-label-list ${voc_label_list} \
     --xml-dir ${voc_anno_dir} \
     --val-list ${voc_ann_list}/val_stem.txt
 ```
 参数说明：
-* voc_label_list: 数据集的类别txt文件，每行一个类别，顺序和定义保持一致。
+* voc-label-list: 数据集的类别txt文件，每行一个类别，顺序和定义保持一致。
 * xml-dir: 存放voc标签的路径
 * val-list: 仅包含验证集图片名(不含文件后缀)的txt文件，即步骤3中生成的`val_stem.txt`
 
@@ -241,6 +245,8 @@ dataset
     └─ 1000.xml
 ```
 
+#### 7. calculate metrics
+
 使用`DetValidator`计算验证集精度：
 ```
 from dataset_utils import DetValidator
@@ -253,10 +259,17 @@ detval = DetValidator(
 detval.cal_metrics()
 ```
 
-具体可参考[examples](../dataset_utils_example.ipynb)。
+精度计算具体可参考[examples](../dataset_utils_example.ipynb)。
+
+</details>
 
 
 ### OBB数据集Pipeline
+
+<details>
+<summary>OBB数据集Pipeline</summary>
+
+#### 整体流程案例可以参考[obb_create_example.sh](../examples/obb_create_example.sh)，以下为详细解释。
 
 #### 1. 标注数据集
 
@@ -438,7 +451,12 @@ obbval.cal_metrics()
 * val_list_path是验证集的图片路径，可以用shell脚本 `find "/data/images/val" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) > "/data/val.txt"`生成。
 * names是类别映射。
 
+</details>
+
 ### InstanceSegment数据集pipeline
+
+<details>
+<summary>InstanceSegment数据集pipeline</summary>
 
 #### 1. 标注数据集
 
@@ -463,7 +481,7 @@ dataset
 
 #### 2. 划分训练、验证和测试集
 
-可以参考[split.py](./split.py)划分训练集、验证集和测试集。
+可以参考[split_yolo.py](./split_yolo.py)划分训练集、验证集和测试集。
 
 #### 3. 精度计算
 
@@ -488,3 +506,5 @@ segval.cal_metrics()
 * gt_path: 标注数据集时，导出的YOLO格式标签。
 * val_list_path: 验证集图片路径，一定要是绝对路径。
 * names: 类别映射。
+
+</details>
