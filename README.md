@@ -62,9 +62,9 @@ python preprocessing/merge_obb_dataset.py
 
     参数说明如下：
     - `input_img_dir`：输入图片目录。
-    - `lib_paths`： 私有库文件路径。
     - `models`：模型列表，每个模型包含以下参数：
         - `model_path`：引擎文件路径。
+        - `model_type`：模型类型，例如 yoloe2e, yolov8等。
         - `class_names`：模型类别名称列表。
         - `class_filter`：模型类别过滤列表，会过滤掉不在列表中的类别。
         - `conf_threshold`：模型置信度阈值，低于阈值的框不标注。
@@ -72,7 +72,9 @@ python preprocessing/merge_obb_dataset.py
 
 2. 运行脚本
 
-    请参考[multi_model_inference_prelabel_trt.py](./multi_model_inference_prelabel_trt.py)文件，运行脚本。
+    hbb预标注:
+
+    请参考[multi_hbb_inference_prelabel_trt.py](./multi_hbb_inference_prelabel_trt.py)文件，运行脚本。
     ```
-    python multi_model_inference_prelabel_trt.py inference/model_config.yaml
+    python multi_hbb_inference_prelabel_trt.py inference/model_config.yaml
     ```
