@@ -67,25 +67,56 @@ def draw_txt(frame, x1, y1, label):
     return frame
 
 
-def draw_alltype(class_names, frame, results):    
-    for obj in results:
-        class_name = class_names[obj.classID]
-        color = get_color(obj.classID)           
-        x, y, w, h  = int(obj.x), int(obj.y), int(obj.w), int(obj.h) 
-        label = f"{class_name} {obj.confidence:.2f}"
-        if obj.radian == 0.0:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-        else:
-            center = (x + w / 2.0, y + h / 2.0)
-            size = (w, h)
-            angle = radian_to_degree(obj.radian)
-            rotated_rect = (center, size, angle)
-            box = cv2.boxPoints(rotated_rect)
-            box = np.int0(box)
-            cv2.drawContours(frame, [box], 0, color, 2)
-        frame = draw_txt(frame,x,y,label)
-    return frame
+# def draw_alltype(class_names, frame, results):    
+#     for obj in results:
+#         class_name = class_names[obj.classID]
+#         color = get_color(obj.classID)           
+#         x, y, w, h  = int(obj.x), int(obj.y), int(obj.w), int(obj.h) 
+#         label = f"{class_name} {obj.confidence:.2f}"
+#         if obj.radian == 0.0:
+#             cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+#         else:
+#             center = (x + w / 2.0, y + h / 2.0)
+#             size = (w, h)
+#             angle = radian_to_degree(obj.radian)
+#             rotated_rect = (center, size, angle)
+#             box = cv2.boxPoints(rotated_rect)
+#             box = np.int0(box)
+#             cv2.drawContours(frame, [box], 0, color, 2)
+#         frame = draw_txt(frame,x,y,label)
+#     return frame
 
+def draw_alltype(class_names, frame, results):
+    try:      
+        for obj in results:
+            if len(obj)==7:
+                x, y, w, h, confidence, class_id,radian = obj
+            else:
+                x, y, w, h, confidence, class_id = obj
+                radian = 0.0
+            x, y, w, h = int(x), int(y), int(w), int(h)
+            # x, y, w, h,confidence, class_id ,radian  = int(obj.x), int(obj.y), int(obj.w), int(obj.h) ,obj.confidence,obj.classID,obj.radian
+            class_name = class_names[class_id]
+            # print(class_name)
+            color = get_color(class_id)           
+            label = f"{class_name} {confidence:.2f}"
+            if class_id == 5:
+                y -= 20
+            if radian == 0.0:
+                cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+            else:
+                center = (x + w / 2.0, y + h / 2.0)
+                size = (w, h)
+                angle = radian_to_degree(radian)
+                rotated_rect = (center, size, angle)
+                box = cv2.boxPoints(rotated_rect)
+                box = np.int0(box)
+                cv2.drawContours(frame, [box], 0, color, 2)
+            frame = draw_txt(frame,x,y,label)
+        return frame
+    except Exception as e:
+        print(f"draw_alltype Error: {e}")
+        return frame  # 保守返回原图
 
 # 弧度转角度函数
 def radian_to_degree(radian):
@@ -94,16 +125,14 @@ def radian_to_degree(radian):
 
 def detbox_to_shape_rectangle(obj, class_names):
     # 转为 rectangle 4点顺时针
-    x1, y1, w, h = float(obj.x), float(obj.y), float(obj.w), float(obj.h)
+    x1, y1, w, h, score, class_id = float(obj[0]), float(obj[1]), float(obj[2]), float(obj[3]), float(obj[4]), int(obj[5])
     points = [
         [x1, y1],
         [x1 + w, y1],
         [x1 + w, y1 + h],
         [x1, y1 + h]
     ]
-    class_id = obj.classID
     label = class_names[class_id] if class_id < len(class_names) else str(class_id)
-    score = float(obj.confidence) if hasattr(obj, "confidence") else None
     return {
         "kie_linking": [],
         "label": label,
