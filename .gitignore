@@ -166,3 +166,5 @@ script_hbb.sh
 script_obb.sh
 test.py
 vis/*
+custom
+custom/*

@@ -1,0 +1,27 @@
+input_img_dir: /data/lorenzo/temp/test
+
+models:
+  - model_path: /data/lorenzo/nofar/Detection/model_version/model8e2e_b32m_20250625_person_attribute_v0.1.4.bin
+    model_type: yoloe2e
+    class_names: ["nomask", "smoking", "nowf", "fall", "sleep", "tx", "wsf"]
+    class_filter: ["nomask", "smoking", "nowf", "fall", "sleep", "tx", "wsf"]
+    conf_threshold: 0.25
+    nms_threshold: 0.45
+  - model_path: /data/lorenzo/nofar/Detection/model_version/model8e2e_b32m_20250621_fire_smoke_v0.1.2.bin
+    model_type: yoloe2e
+    class_names: ["fire", "smoke"]
+    class_filter: ["fire", "smoke"]
+    conf_threshold: 0.25
+    nms_threshold: 0.45
+  - model_path: /data/lorenzo/nofar/Detection/model_version/model8e2e_b32m_20250630_person_attribute_v0.1.5_1_b1_fp16.bin
+    model_type: yoloe2e
+    class_names: ["nomask", "mask", "smoking", "nowf", "wf", "fall", "sleep", "tx", "wsf"]
+    class_filter: ["mask", "wf"]
+    conf_threshold: 0.25
+    nms_threshold: 0.45
+  - model_path: /data/lorenzo/nofar/Detection/model_version/model8e2e_b32m_20250621_person_v0.1.2.bin
+    model_type: yoloe2e
+    class_names: ["person"]
+    class_filter: ["person"]
+    conf_threshold: 0.25
+    nms_threshold: 0.45
