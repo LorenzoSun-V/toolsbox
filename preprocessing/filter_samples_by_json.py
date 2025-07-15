@@ -1,3 +1,6 @@
+# description: This script filters samples based on JSON files, 
+# selecting images that contain specified classes with a minimum count threshold.
+
 import os
 import json
 import shutil
@@ -103,6 +106,6 @@ def count_labels(data, target_labels):
 
 # 使用示例
 if __name__ == "__main__":
-    folder_path = "/data/nofar/person_behavior/labeled_data/labeling_rule_v2.0.0/20250702/images"
-    cls_name = ["sleep", "fall"]
+    folder_path = "/data/nofar/material/liandongUgu/2025-07-09/person_behavior_labeling/0711/yc_finish/0711"
+    cls_name = ["legs"]
     select_target(folder_path, cls_name, 1)
