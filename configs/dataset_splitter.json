@@ -1,0 +1,5 @@
+{
+    "fire-smoke": ["fire", "smoke"],
+    "person": ["person"],
+    "person_behavior": ["nomask", "smoking", "nowf", "fall", "sleep", "tx", "wsf", "mask", "wf", "legs"]
+}
