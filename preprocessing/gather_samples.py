@@ -1,6 +1,8 @@
 # description: This script gathers samples from multiple directories, merging them into a single directory.
 
+import argparse
 import os
+import os.path as osp
 import shutil
 from glob import glob
 from tqdm import tqdm
@@ -26,22 +28,29 @@ def gather_samples(src_dirs, dest_dir):
         files = glob(os.path.join(src_dir, '**', '*.*'), recursive=True)
         for file in tqdm(files, desc=f"Gathering from {src_dir}"):
             if os.path.isfile(file):
-                # Construct the destination file path
-                dest_file = os.path.join(dest_dir, os.path.relpath(file, src_dir))
-                dest_file_dir = os.path.dirname(dest_file)
-                
-                # Create the destination directory if it does not exist
-                os.makedirs(dest_file_dir, exist_ok=True)
-                
-                # Copy the file to the destination directory
-                shutil.copy2(file, dest_file)
-                print(f"Copied {file} to {dest_file}")
+                shutil.copy(file, dest_dir)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Merge multiple datasets into one')
+    parser.add_argument('--src_dirs', '-s', nargs='+', required=True, 
+                        help='Source dataset directories to merge')
+    parser.add_argument('--dst_dir', '-d', required=True, 
+                        help='Destination directory for merged dataset')
+    
+    args = parser.parse_args()
+    
+    # 验证源目录是否存在
+    for src_dir in args.src_dirs:
+        if not osp.exists(src_dir):
+            print(f"Error: Source directory {src_dir} does not exist!")
+            return
+    
+    print(f"Copy data from: {args.src_dirs}")
+    print(f"Output directory: {args.dst_dir}")
+    
+    gather_samples(args.src_dirs, args.dst_dir)
 
 
 if __name__ == "__main__":
-    source_dirs = [
-        "/data/nofar/material/liandongUgu/2025-07-09/person_behavior_labeling/0711",
-        "/data/nofar/material/liandongUgu/2025-07-09/person_behavior_labeling/0714",
-    ]
-    destination_dir = "/data/nofar/material/liandongUgu/2025-07-09/person_behavior_labeling/merged"
-    gather_samples(source_dirs, destination_dir)
+    main()

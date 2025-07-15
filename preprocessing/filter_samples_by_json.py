@@ -1,6 +1,7 @@
 # description: This script filters samples based on JSON files, 
 # selecting images that contain specified classes with a minimum count threshold.
 
+import argparse
 import os
 import json
 import shutil
@@ -104,8 +105,28 @@ def count_labels(data, target_labels):
     return dict(label_counts)
 
 
-# 使用示例
+def main():
+    parser = argparse.ArgumentParser(description='Merge multiple datasets into one')
+    parser.add_argument('--src_dir', '-s', required=True, 
+                        help='Destination directory for merged dataset')
+    parser.add_argument('--cls_names', '-c', nargs='+', required=True, 
+                        help='Source dataset directories to merge')
+    parser.add_argument('--num', '-n', type=int, default=1,
+                        help='Minimum count threshold for each class')
+    
+    
+    args = parser.parse_args()
+    
+    # 验证源目录是否存在
+    if not os.path.exists(args.src_dir):
+        print(f"Error: Source directory {args.src_dir} does not exist!")
+        return
+
+    print(f"Select data from: {args.src_dir}")
+    print(f"Output directory: {os.path.join(os.path.dirname(args.src_dir), 'select')}")
+
+    select_target(args.src_dir, args.cls_names, args.num)
+
+
 if __name__ == "__main__":
-    folder_path = "/data/nofar/material/liandongUgu/2025-07-09/person_behavior_labeling/0711/yc_finish/0711"
-    cls_name = ["legs"]
-    select_target(folder_path, cls_name, 1)
+    main()
