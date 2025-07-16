@@ -17,42 +17,114 @@ from utils import load_classes
 
 
 def convert_annotation(image_id, classes):
-    with open('%s.xml'%(image_id), encoding="utf8", errors='ignore') as f:
-        tree = ET.parse(f)
-    # in_file = open('%s.xml'%(image_id))
-    # tree=ET.parse(in_file)
-    root = tree.getroot()
-    size = root.find('size')
-    w = int(size.find('width').text)
-    h = int(size.find('height').text)
-   
-    if w==0 and h==0:
-        return
+    try:
+        with open('%s.xml'%(image_id), encoding="utf8", errors='ignore') as f:
+            tree = ET.parse(f)
+        root = tree.getroot()
+        size = root.find('size')
+        
+        # 检查 size 元素是否存在
+        if size is None:
+            print(f"警告: {image_id}.xml 中缺少 size 元素")
+            return
+            
+        width_elem = size.find('width')
+        height_elem = size.find('height')
+        
+        # 检查 width 和 height 元素是否存在
+        if width_elem is None or height_elem is None:
+            print(f"警告: {image_id}.xml 中缺少 width 或 height 元素")
+            return
+            
+        w = int(width_elem.text)
+        h = int(height_elem.text)
     
-    out_file = open('%s.txt'%(image_id), 'w')    
-    for obj in root.iter('object'):
-        try:
-            difficult = obj.find('difficult').text
-        except AttributeError:
+        if w == 0 and h == 0:
+            print(f"警告: {image_id}.xml 中图像尺寸为 0")
+            return
+        
+        annotations = []  # 存储有效的标注
+        
+        for obj in root.iter('object'):
             try:
-                difficult = obj.find('Difficult').text
-            except AttributeError:
-                difficult = '0'
-        cls = obj.find('name').text
-        if cls not in classes or int(difficult)==1:
-            continue
+                # 处理 difficult 属性
+                difficult = obj.find('difficult')
+                if difficult is None:
+                    difficult = obj.find('Difficult')
+                difficult_value = '0' if difficult is None else difficult.text
+                
+                # 获取类别名称
+                name_elem = obj.find('name')
+                if name_elem is None:
+                    print(f"警告: {image_id}.xml 中某个 object 缺少 name 元素")
+                    continue
+                    
+                cls = name_elem.text
+                if cls not in classes or int(difficult_value) == 1:
+                    continue
+                
+                cls_id = classes.index(cls)
+                
+                # 获取边界框信息
+                xmlbox = obj.find('bndbox')
+                assert xmlbox is not None, f"警告: {image_id}.xml 中某个 object 缺少 bndbox 元素"
+                
+                # 检查边界框的各个坐标元素
+                xmin_elem = xmlbox.find('xmin')
+                ymin_elem = xmlbox.find('ymin')
+                xmax_elem = xmlbox.find('xmax')
+                ymax_elem = xmlbox.find('ymax')
+                
+                assert all(elem is not None for elem in [xmin_elem, ymin_elem, xmax_elem, ymax_elem]), f"警告: {image_id}.xml 中某个 bndbox 缺少坐标元素"
+                
+                # 尝试转换坐标为浮点数
+                try:
+                    xmin = float(xmin_elem.text)
+                    ymin = float(ymin_elem.text)
+                    xmax = float(xmax_elem.text)
+                    ymax = float(ymax_elem.text)
+                except (ValueError, TypeError) as e:
+                    print(f"警告: {image_id}.xml 中坐标值无法转换为数字: {e}")
+                    continue
+                
+                # 验证边界框的有效性
+                if xmin >= xmax or ymin >= ymax:
+                    print(f"警告: {image_id}.xml 中边界框坐标无效: ({xmin}, {ymin}, {xmax}, {ymax})")
+                    continue
+                
+                # 确保坐标在图像范围内
+                if xmin < 0 or ymin < 0 or xmax > w or ymax > h:
+                    print(f"警告: {image_id}.xml 中边界框超出图像范围: ({xmin}, {ymin}, {xmax}, {ymax}), 图像尺寸: ({w}, {h})")
+                    # 可以选择跳过或者裁剪到图像范围内
+                    # 这里选择裁剪
+                    xmin = max(0, xmin)
+                    ymin = max(0, ymin)
+                    xmax = min(w, xmax)
+                    ymax = min(h, ymax)
+                
+                b = (xmin, ymin, xmax, ymax)
+                annotations.append(f"{cls_id} {' '.join([str(int(a)) for a in b])}\n")
+                
+            except Exception as e:
+                print(f"处理 {image_id}.xml 中的对象时出错: {e}")
+                continue
         
-        cls_id = classes.index(cls)
-        # print("cls_id: ",cls_id)
-        xmlbox = obj.find('bndbox')
-        b = (float(xmlbox.find('xmin').text), float(xmlbox.find('ymin').text), float(xmlbox.find('xmax').text), float(xmlbox.find('ymax').text))
-        out_file.write(str(cls_id) + " " + " ".join([str(int(a)) for a in b]) + '\n')
-    out_file.close()
-        
-    # text_size = os.path.getsize(str(image_id+".txt"))
-    # # print(text_size)
-    # if text_size == 0:
-    #     os.remove(str(image_id+".txt"))
+        # 写入文件
+        if annotations:  # 只有当有有效标注时才创建文件
+            with open('%s.txt'%(image_id), 'w') as out_file:
+                out_file.writelines(annotations)
+        # else:
+        #     print(f"警告: {image_id}.xml 中没有有效的标注")
+            
+    except ET.ParseError as e:
+        print(f"XML解析错误: {image_id}.xml - {e}")
+        return
+    except FileNotFoundError:
+        print(f"文件不存在: {image_id}.xml")
+        return
+    except Exception as e:
+        print(f"处理 {image_id}.xml 时发生未知错误: {e}")
+        return
 
 
 def main():
@@ -61,25 +133,44 @@ def main():
     parser.add_argument('--val-list', type=str, help='val_stem set list')
     parser.add_argument('--xml-dir', type=str, help='which classes to do xml2yolo')
     args = parser.parse_args()
-    classes = load_classes(args.voc_label_list)
+    
+    try:
+        classes = load_classes(args.voc_label_list)
+    except Exception as e:
+        print(f"加载类别列表时出错: {e}")
+        return
 
     root_path = args.xml_dir
-    with open(args.val_list, 'r') as f:
-        val_list = f.readlines()
-        val_list = [x.strip() for x in val_list]
-        xml_dirs = [join(root_path, x+".xml") for x in val_list]
+    
+    try:
+        with open(args.val_list, 'r') as f:
+            val_list = f.readlines()
+            val_list = [x.strip() for x in val_list]
+            xml_dirs = [join(root_path, x+".xml") for x in val_list]
+    except FileNotFoundError:
+        print(f"文件不存在: {args.val_list}")
+        return
 
+    print(f"开始处理 {len(xml_dirs)} 个 XML 文件...")
     for xml_dir in tqdm(xml_dirs):
         convert_annotation(xml_dir[:-4], classes)
 
+    # 移动生成的 txt 文件
     root_path = os.path.dirname(args.xml_dir.rstrip(os.path.sep)) if args.xml_dir.endswith('/') else os.path.dirname(args.xml_dir)
-    print(root_path)
+    print(f"根路径: {root_path}")
     save_dir = join(root_path, "gts")
-    if not os.path.exists(save_dir): os.makedirs(save_dir, exist_ok=True)
+    
+    if not os.path.exists(save_dir): 
+        os.makedirs(save_dir, exist_ok=True)
 
     txt_files = [f for f in os.listdir(args.xml_dir) if f.endswith('.txt')]
+    print(f"移动 {len(txt_files)} 个 txt 文件到 {save_dir}")
+    
     for txt_file in tqdm(txt_files):
-        shutil.move(os.path.join(args.xml_dir, txt_file), os.path.join(save_dir, txt_file))
+        try:
+            shutil.move(os.path.join(args.xml_dir, txt_file), os.path.join(save_dir, txt_file))
+        except Exception as e:
+            print(f"移动文件 {txt_file} 时出错: {e}")
 
 
 if __name__ == '__main__':
