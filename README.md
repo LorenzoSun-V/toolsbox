@@ -160,7 +160,7 @@ python preprocessing/dataset_splitter.py --source_dir ${data_dir} --config_file 
 该脚本主要是为了将特定包含特定类别的样本筛选出来，符合要求的样本会连同标签一起复制到数据集根目录下的`select`目录下。
 
 ```
-img_dir=/data/nofar/material/liandongUgu/2025-07-09/person_behavior_labeling/merged_0711_0714
+img_dir=/data/src
 cls="legs tx"
 num=1
 
