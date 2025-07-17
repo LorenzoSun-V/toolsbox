@@ -1,10 +1,12 @@
 import argparse
 import os
+import sys
 import cv2
 import logging
 from time import time
 from pathlib import Path
 from typing import List, Tuple, Optional
+from tqdm.contrib.logging import logging_redirect_tqdm
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
@@ -12,6 +14,7 @@ import numpy as np
 import subprocess
 import tempfile
 import json
+from datetime import datetime
 
 
 class VideoFrameExtractor:
@@ -49,8 +52,8 @@ class VideoFrameExtractor:
         self.use_ffmpeg = use_ffmpeg
         self.validate_frames = validate_frames
         
-        # Setup logging
-        self._setup_logging()
+        # Setup logging (will be configured in main)
+        self.logger = logging.getLogger(__name__)
         
         # Check FFmpeg availability
         self.ffmpeg_available = self._check_ffmpeg()
@@ -65,27 +68,16 @@ class VideoFrameExtractor:
         self.skipped_corrupted_frames = 0
         self.ffmpeg_processed = 0
 
-    def _setup_logging(self):
-        """Setup logging configuration."""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler('video_extraction.log'),
-                logging.StreamHandler()
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
-
     def _check_ffmpeg(self) -> bool:
         """Check if FFmpeg is available."""
         try:
+            # Use check=False to prevent raising an exception on non-zero exit codes
             result = subprocess.run(['ffmpeg', '-version'], 
-                                  capture_output=True, text=True, timeout=5)
+                                  capture_output=True, text=True, timeout=5, check=False)
             if result.returncode == 0:
                 self.logger.info("FFmpeg detected and available")
                 return True
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
         
         self.logger.warning("FFmpeg not available - will use OpenCV only")
@@ -107,497 +99,257 @@ class VideoFrameExtractor:
 
     def _get_video_files(self, recursive: bool = True) -> List[Path]:
         """Get list of video files from the input directory."""
-        video_files = []
-        
-        if recursive:
-            for file_path in self.root_path.rglob('*'):
-                if file_path.is_file() and file_path.suffix.lower() in self.VIDEO_EXTENSIONS:
-                    video_files.append(file_path)
-        else:
-            for file_path in self.root_path.iterdir():
-                if file_path.is_file() and file_path.suffix.lower() in self.VIDEO_EXTENSIONS:
-                    video_files.append(file_path)
+        video_files = [
+            p for p in self.root_path.rglob('*') if p.is_file() and p.suffix.lower() in self.VIDEO_EXTENSIONS
+        ] if recursive else [
+            p for p in self.root_path.iterdir() if p.is_file() and p.suffix.lower() in self.VIDEO_EXTENSIONS
+        ]
         
         self.logger.info(f"Found {len(video_files)} video files{'(recursive)' if recursive else ''}")
         return video_files
 
+    def _generate_video_timestamp(self, video_path: Path) -> str:
+        """
+        Generate a unique timestamp for the video based on current time and video name.
+        """
+        now = datetime.now()
+        timestamp = now.strftime("%Y%m%d%H%M%S")
+        video_name_hash = abs(hash(video_path.name)) % 10000
+        return f"{timestamp}_{video_name_hash:04d}"
+
     def _get_video_info(self, video_path: Path) -> dict:
-        """Get video information using FFprobe."""
+        """Get video information using FFprobe, with a fallback to OpenCV."""
+        info = {'codec': 'unknown', 'is_hevc': False, 'fps': 25.0}
         try:
             cmd = [
                 'ffprobe', '-v', 'quiet', '-show_entries', 
-                'stream=codec_name,width,height,duration,r_frame_rate',
+                'stream=codec_name,width,height,duration,r_frame_rate,codec_type',
                 '-of', 'json', str(video_path)
             ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            
-            if result.returncode == 0:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
+            if result.returncode == 0 and result.stdout:
                 data = json.loads(result.stdout)
-                
-                video_info = {
-                    'codec': None,
-                    'width': None,
-                    'height': None,
-                    'duration': None,
-                    'fps': 25.0,
-                    'is_hevc': False
-                }
-                
                 for stream in data.get('streams', []):
-                    if stream.get('codec_type') == 'video' or 'codec_name' in stream:
-                        codec = stream.get('codec_name', '').lower()
-                        video_info['codec'] = codec
-                        video_info['is_hevc'] = codec in self.HEVC_CODECS
-                        video_info['width'] = stream.get('width')
-                        video_info['height'] = stream.get('height')
-                        
-                        # Get duration
+                    if stream.get('codec_type') == 'video':
+                        info['codec'] = stream.get('codec_name', 'unknown').lower()
+                        info['is_hevc'] = info['codec'] in self.HEVC_CODECS
+                        info['width'] = stream.get('width')
+                        info['height'] = stream.get('height')
                         if 'duration' in stream:
-                            video_info['duration'] = float(stream['duration'])
-                        
-                        # Parse frame rate
-                        if 'r_frame_rate' in stream:
-                            fps_str = stream['r_frame_rate']
-                            if '/' in fps_str and fps_str != '0/0':
-                                try:
-                                    num, den = fps_str.split('/')
-                                    video_info['fps'] = float(num) / float(den)
-                                except (ValueError, ZeroDivisionError):
-                                    pass
+                            try: info['duration'] = float(stream['duration'])
+                            except (ValueError, TypeError): pass
+                        if 'r_frame_rate' in stream and '/' in stream['r_frame_rate']:
+                            try:
+                                num, den = stream['r_frame_rate'].split('/')
+                                if float(den) > 0: info['fps'] = float(num) / float(den)
+                            except (ValueError, ZeroDivisionError): pass
                         break
-                
-                return video_info
-                
-        except Exception as e:
-            self.logger.debug(f"FFprobe failed for {video_path}: {e}")
-        
-        # Fallback to OpenCV
+                return info
+        except (Exception, json.JSONDecodeError) as e:
+            self.logger.debug(f"FFprobe failed for {video_path.name}: {e}")
+
         try:
             cap = cv2.VideoCapture(str(video_path))
             if cap.isOpened():
-                fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                info['fps'] = cap.get(cv2.CAP_PROP_FPS) or 25.0
+                info['width'] = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                info['height'] = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                duration = frame_count / fps if fps > 0 else None
+                if info['fps'] > 0: info['duration'] = frame_count / info['fps']
                 cap.release()
-                
-                return {
-                    'codec': 'unknown',
-                    'width': width,
-                    'height': height,
-                    'duration': duration,
-                    'fps': fps,
-                    'is_hevc': False
-                }
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.debug(f"OpenCV info fallback failed for {video_path.name}: {e}")
         
-        return {'codec': 'unknown', 'is_hevc': False, 'fps': 25.0}
+        return info
 
     def _is_frame_valid(self, frame: np.ndarray) -> bool:
         """Check if a frame is valid (not corrupted/gray)."""
-        if frame is None or frame.size == 0:
-            return False
-        
-        # Check if frame is mostly gray/corrupted
-        if len(frame.shape) == 3:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = frame
-        
-        # Calculate variance and mean
-        variance = np.var(gray)
+        if frame is None or frame.size == 0: return False
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+        if np.var(gray) < 50.0: return False
         mean_val = np.mean(gray)
-        
-        # Thresholds for validation
-        min_variance = 50.0
-        
-        # Reject frames that are too uniform
-        if variance < min_variance:
-            return False
-        
-        # Check for completely black or white frames
-        if mean_val < 5 or mean_val > 250:
-            return False
-        
-        # Check for reasonable pixel distribution
+        if mean_val < 5 or mean_val > 250: return False
         hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
-        max_bin = np.max(hist)
-        total_pixels = gray.shape[0] * gray.shape[1]
-        
-        # If more than 90% of pixels are the same value, likely corrupted
-        if max_bin > 0.9 * total_pixels:
-            return False
-        
+        if np.max(hist) > 0.9 * gray.size: return False
         return True
 
-    def _extract_frames_with_ffmpeg(self, video_path: Path, output_dir: Path, 
-                                   video_info: dict) -> Tuple[int, int]:
-        """Extract frames using FFmpeg to avoid HEVC issues."""
-        try:
-            fps = video_info.get('fps', 25.0)
-            
-            # Calculate frame extraction rate
-            extract_fps = fps / self.skip_frame
-            
-            # Create temporary directory for raw frames
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                
-                # FFmpeg command to extract frames
-                cmd = [
-                    'ffmpeg', '-y', '-i', str(video_path),
-                    '-vf', f'fps={extract_fps}',
-                    '-q:v', '2',  # High quality
-                    '-f', 'image2',
-                    str(temp_path / 'frame_%08d.jpg')
-                ]
-                
-                # Run FFmpeg with timeout
-                result = subprocess.run(
-                    cmd, 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=300  # 5 minute timeout
-                )
-                
-                if result.returncode != 0:
-                    self.logger.error(f"FFmpeg extraction failed for {video_path.name}: {result.stderr}")
-                    return 0, 0
-                
-                # Process extracted frames
-                extracted_files = sorted(temp_path.glob('frame_*.jpg'))
-                saved_count = 0
-                skipped_count = 0
-                start_time = int(time() * 1000)
-                
-                for i, frame_file in enumerate(extracted_files):
-                    try:
-                        # Read frame for validation
+    def _extract_frames_with_method(self, video_path: Path, output_dir: Path, video_info: dict, timestamp_prefix: str, use_ffmpeg: bool) -> Tuple[int, int]:
+        """Core frame extraction logic for either FFmpeg or OpenCV."""
+        saved_count, skipped_count = 0, 0
+        jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, self.jpg_quality]
+        
+        if use_ffmpeg:
+            try:
+                fps = video_info.get('fps', 25.0) or 25.0
+                extract_fps = fps / self.skip_frame
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    cmd = ['ffmpeg', '-y', '-i', str(video_path), '-vf', f'fps={extract_fps}', '-q:v', '2', '-f', 'image2', str(Path(temp_dir) / 'f_%08d.jpg')]
+                    subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False)
+                    for frame_file in sorted(Path(temp_dir).glob('f_*.jpg')):
                         frame = cv2.imread(str(frame_file))
-                        
-                        # Validate frame if enabled
                         if self.validate_frames and not self._is_frame_valid(frame):
                             skipped_count += 1
                             continue
-                        
-                        # Generate output filename
-                        timestamp = start_time + int((i / extract_fps) * 1000)
-                        filename = f"{timestamp:013d}_{saved_count:06d}.jpg"
-                        output_path = output_dir / filename
-                        
-                        # Copy/convert frame with desired quality
-                        jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, self.jpg_quality, 
-                                     cv2.IMWRITE_JPEG_OPTIMIZE, 1]
-                        
-                        success = cv2.imwrite(str(output_path), frame, jpeg_params)
-                        if success:
-                            saved_count += 1
-                        else:
-                            skipped_count += 1
-                            
-                    except Exception as e:
-                        self.logger.debug(f"Error processing frame {frame_file}: {e}")
-                        skipped_count += 1
-                
+                        filename = f"{timestamp_prefix}_{saved_count:06d}.jpg"
+                        if cv2.imwrite(str(output_dir / filename), frame, jpeg_params): saved_count += 1
+                        else: skipped_count += 1
                 return saved_count, skipped_count
-                
-        except subprocess.TimeoutExpired:
-            self.logger.error(f"FFmpeg timeout for {video_path.name}")
-            return 0, 0
-        except Exception as e:
-            self.logger.error(f"FFmpeg extraction error for {video_path.name}: {e}")
-            return 0, 0
-
-    def _extract_frames_with_opencv(self, video_path: Path, output_dir: Path, 
-                                   video_info: dict) -> Tuple[int, int]:
-        """Extract frames using OpenCV (fallback method)."""
-        cap = None
-        try:
-            cap = cv2.VideoCapture(str(video_path))
-            if not cap.isOpened():
-                self.logger.error(f"Failed to open video with OpenCV: {video_path}")
+            except Exception as e:
+                self.logger.error(f"FFmpeg extraction error for {video_path.name}: {e}")
                 return 0, 0
-            
-            # Set buffer size to reduce memory usage
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            
-            fps = video_info.get('fps', 25.0)
-            frame_count = 0
-            saved_count = 0
-            skipped_count = 0
-            start_time = int(time() * 1000)
-            
-            # JPEG encoding parameters
-            jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, self.jpg_quality, 
-                          cv2.IMWRITE_JPEG_OPTIMIZE, 1]
-            
-            # Track consecutive failures
-            consecutive_failures = 0
-            max_consecutive_failures = 50
-            
-            while True:
-                ret, frame = cap.read()
-                
-                if not ret:
-                    consecutive_failures += 1
-                    if consecutive_failures > max_consecutive_failures:
-                        self.logger.warning(f"Too many consecutive failures for {video_path.name}")
-                        break
-                    continue
-                
-                consecutive_failures = 0
-                
-                # Extract frame based on skip_frame interval
-                if frame_count % self.skip_frame == 0:
-                    # Validate frame if enabled
-                    if self.validate_frames and not self._is_frame_valid(frame):
-                        skipped_count += 1
-                        self.logger.debug(f"Skipped corrupted frame {frame_count} from {video_path.name}")
-                    else:
-                        # Generate timestamp-based filename
-                        timestamp = start_time + int((frame_count / fps) * 1000)
-                        filename = f"{timestamp:013d}_{saved_count:06d}.jpg"
-                        frame_path = output_dir / filename
-                        
-                        # Save frame
-                        success = cv2.imwrite(str(frame_path), frame, jpeg_params)
-                        if success:
-                            saved_count += 1
-                        else:
+        else: # OpenCV
+            cap = None
+            try:
+                cap = cv2.VideoCapture(str(video_path))
+                if not cap.isOpened():
+                    self.logger.error(f"Failed to open with OpenCV: {video_path.name}")
+                    return 0, 0
+                frame_idx = 0
+                while True:
+                    ret, frame = cap.read()
+                    if not ret: break
+                    if frame_idx % self.skip_frame == 0:
+                        if self.validate_frames and not self._is_frame_valid(frame):
                             skipped_count += 1
-                
-                frame_count += 1
-            
-            return saved_count, skipped_count
-            
-        except Exception as e:
-            self.logger.error(f"OpenCV extraction error for {video_path}: {e}")
-            return 0, 0
-        finally:
-            if cap is not None:
-                cap.release()
+                        else:
+                            filename = f"{timestamp_prefix}_{saved_count:06d}.jpg"
+                            if cv2.imwrite(str(output_dir / filename), frame, jpeg_params): saved_count += 1
+                            else: skipped_count += 1
+                    frame_idx += 1
+                return saved_count, skipped_count
+            except Exception as e:
+                self.logger.error(f"OpenCV extraction error for {video_path.name}: {e}")
+                return 0, 0
+            finally:
+                if cap: cap.release()
 
-    def _extract_frames_from_video(self, video_path: Path, output_dir: Path) -> Tuple[int, int]:
-        """Extract frames from a single video file using the best available method."""
-        try:
-            # Get video information
-            video_info = self._get_video_info(video_path)
-            
-            # Decide which method to use
-            use_ffmpeg = (
-                self.use_ffmpeg and 
-                self.ffmpeg_available and 
-                video_info.get('is_hevc', False)
-            )
-            
-            if use_ffmpeg:
-                self.logger.debug(f"Using FFmpeg for HEVC video: {video_path.name}")
-                frames_extracted, frames_skipped = self._extract_frames_with_ffmpeg(
-                    video_path, output_dir, video_info
-                )
-                if frames_extracted > 0:
-                    self.ffmpeg_processed += 1
-                    return frames_extracted, frames_skipped
-                else:
-                    # Fallback to OpenCV
-                    self.logger.warning(f"FFmpeg failed, trying OpenCV for: {video_path.name}")
-            
-            # Use OpenCV
-            return self._extract_frames_with_opencv(video_path, output_dir, video_info)
-            
-        except Exception as e:
-            self.logger.error(f"Error processing video {video_path}: {e}")
-            return 0, 0
+    def _process_single_video(self, video_path: Path) -> Tuple[str, int, int, bool]:
+        """Wrapper for processing a single video."""
+        output_dir = self.out_path / video_path.stem
+        output_dir.mkdir(exist_ok=True)
+        
+        if any(output_dir.glob('*.jpg')):
+            self.logger.info(f"Skipping non-empty directory: {video_path.stem}")
+            return video_path.stem, len(list(output_dir.glob('*.jpg'))), 0, False
 
-    def _process_single_video(self, video_path: Path) -> Tuple[str, int, int]:
-        """Process a single video file (wrapper for threading)."""
-        try:
-            # Create output directory for this video
-            video_name = video_path.stem
-            output_dir = self.out_path / video_name
-            output_dir.mkdir(exist_ok=True)
-            
-            # Check if directory already contains files
-            existing_files = list(output_dir.glob("*.jpg"))
-            if existing_files:
-                self.logger.info(f"Output directory for {video_name} already contains {len(existing_files)} files, skipping...")
-                return video_name, len(existing_files), 0
-            
-            frames_extracted, frames_skipped = self._extract_frames_from_video(video_path, output_dir)
-            return video_name, frames_extracted, frames_skipped
-            
-        except Exception as e:
-            self.logger.error(f"Error in thread processing {video_path}: {str(e)}")
-            return video_path.name, 0, 0
+        timestamp_prefix = self._generate_video_timestamp(video_path)
+        video_info = self._get_video_info(video_path)
+        
+        use_ffmpeg_flag = self.use_ffmpeg and self.ffmpeg_available and video_info.get('is_hevc', False)
+        
+        if use_ffmpeg_flag:
+            self.logger.debug(f"Using FFmpeg for HEVC video: {video_path.name}")
+            frames_extracted, frames_skipped = self._extract_frames_with_method(video_path, output_dir, video_info, timestamp_prefix, use_ffmpeg=True)
+            if frames_extracted > 0 or frames_skipped > 0:
+                return video_path.stem, frames_extracted, frames_skipped, True
+            self.logger.warning(f"FFmpeg failed for {video_path.name}, falling back to OpenCV.")
+        
+        self.logger.debug(f"Using OpenCV for video: {video_path.name}")
+        frames_extracted, frames_skipped = self._extract_frames_with_method(video_path, output_dir, video_info, timestamp_prefix, use_ffmpeg=False)
+        return video_path.stem, frames_extracted, frames_skipped, False
 
     def extract_all_frames(self) -> dict:
-        """Extract frames from all video files using multi-threading."""
+        """Extract frames from all videos using a thread pool."""
         video_files = self._get_video_files()
         if not video_files:
-            self.logger.warning("No video files found in the input directory")
-            return {"total_videos": 0, "processed_videos": 0, "total_frames": 0, "skipped_frames": 0}
+            self.logger.warning("No video files found.")
+            return {}
         
         self.total_videos = len(video_files)
-        self.logger.info(f"Starting extraction with {self.workers} workers")
-        self.logger.info(f"FFmpeg support: {'enabled' if self.ffmpeg_available else 'disabled'}")
-        self.logger.info(f"Frame validation: {'enabled' if self.validate_frames else 'disabled'}")
+        self.logger.info(f"Starting extraction with {self.workers} workers...")
         
         start_time = time()
         
-        # Process videos with thread pool
-        with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            # Submit all tasks
-            future_to_video = {
-                executor.submit(self._process_single_video, video_path): video_path
-                for video_path in video_files
-            }
+        with logging_redirect_tqdm(), ThreadPoolExecutor(max_workers=self.workers) as executor:
+            future_to_video = {executor.submit(self._process_single_video, v): v for v in video_files}
             
-            # Process completed tasks with progress bar
             with tqdm(total=len(video_files), desc="Processing Videos", unit="video") as pbar:
                 for future in as_completed(future_to_video):
-                    video_path = future_to_video[future]
                     try:
-                        video_name, frames_extracted, frames_skipped = future.result()
-                        self.processed_videos += 1
-                        self.total_frames_extracted += frames_extracted
-                        self.skipped_corrupted_frames += frames_skipped
-                        pbar.set_postfix({
-                            'Current': video_name[:20],
-                            'Frames': frames_extracted,
-                            'Skipped': frames_skipped
-                        })
+                        video_name, extracted, skipped, used_ffmpeg = future.result()
+                        if extracted > 0 or skipped > 0: self.processed_videos += 1
+                        if used_ffmpeg: self.ffmpeg_processed += 1
+                        self.total_frames_extracted += extracted
+                        self.skipped_corrupted_frames += skipped
+                        pbar.set_postfix({'Current': video_name[:20], 'Frames': extracted, 'Skipped': skipped})
                     except Exception as e:
-                        self.logger.error(f"Failed to process {video_path}: {str(e)}")
+                        self.logger.error(f"A video process failed: {e}")
                     finally:
                         pbar.update(1)
-        
-        end_time = time()
-        processing_time = end_time - start_time
-        
-        # Log final statistics
+
+        processing_time = time() - start_time
         stats = {
-            "total_videos": self.total_videos,
-            "processed_videos": self.processed_videos,
-            "total_frames": self.total_frames_extracted,
-            "skipped_frames": self.skipped_corrupted_frames,
-            "ffmpeg_processed": self.ffmpeg_processed,
-            "processing_time": processing_time,
+            "total_videos": self.total_videos, "processed_videos": self.processed_videos,
+            "total_frames": self.total_frames_extracted, "skipped_frames": self.skipped_corrupted_frames,
+            "ffmpeg_processed": self.ffmpeg_processed, "processing_time": processing_time,
             "videos_per_second": self.processed_videos / processing_time if processing_time > 0 else 0
         }
         
-        self.logger.info("=" * 50)
-        self.logger.info("EXTRACTION COMPLETE")
-        self.logger.info(f"Total videos found: {stats['total_videos']}")
-        self.logger.info(f"Successfully processed: {stats['processed_videos']}")
-        self.logger.info(f"Total frames extracted: {stats['total_frames']}")
-        self.logger.info(f"Corrupted frames skipped: {stats['skipped_frames']}")
-        self.logger.info(f"Videos processed with FFmpeg: {stats['ffmpeg_processed']}")
-        self.logger.info(f"Processing time: {stats['processing_time']:.2f} seconds")
-        self.logger.info(f"Average: {stats['videos_per_second']:.2f} videos/second")
-        self.logger.info("=" * 50)
-        
+        self.logger.info("\n" + "="*50 + "\nEXTRACTION COMPLETE\n" +
+                         f"Total videos found: {stats['total_videos']}\n" +
+                         f"Successfully processed: {stats['processed_videos']}\n" +
+                         f"Total frames extracted: {stats['total_frames']}\n" +
+                         f"Corrupted frames skipped: {stats['skipped_frames']}\n" +
+                         f"Videos processed with FFmpeg: {stats['ffmpeg_processed']}\n" +
+                         f"Processing time: {stats['processing_time']:.2f} seconds\n" +
+                         f"Average: {stats['videos_per_second']:.2f} videos/second\n" + "="*50)
         return stats
 
-
-def parse_arguments():
-    """Parse and validate command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Extract frames from video files with FFmpeg and OpenCV support",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+def setup_logging(level: str):
+    """Configures the root logger."""
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.FileHandler('video_extraction.log'), logging.StreamHandler()]
     )
-    
-    parser.add_argument(
-        'root_path',
-        help='Input directory containing video files'
-    )
-    
-    parser.add_argument(
-        'out_path',
-        help='Output directory for extracted frames'
-    )
-    
-    parser.add_argument(
-        '--skip',
-        type=int,
-        default=5,
-        help='Number of frames to skip between extractions (higher = fewer frames)'
-    )
-    
-    parser.add_argument(
-        '--jpg_quality',
-        type=int,
-        default=80,
-        help='JPEG quality (1-100, higher = better quality, larger files)'
-    )
-    
-    parser.add_argument(
-        '--workers',
-        type=int,
-        default=None,
-        help='Number of worker threads (default: auto-detect based on CPU cores)'
-    )
-    
-    parser.add_argument(
-        '--no-ffmpeg',
-        action='store_true',
-        help='Disable FFmpeg usage (use OpenCV only)'
-    )
-    
-    parser.add_argument(
-        '--no-validation',
-        action='store_true',
-        help='Disable frame validation (save all frames including corrupted ones)'
-    )
-    
-    parser.add_argument(
-        '--log-level',
-        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
-        default='INFO',
-        help='Logging level'
-    )
-    
-    return parser.parse_args()
-
 
 def main():
-    """Main entry point."""
+    """Main entry point with robust terminal state handling."""
+    exit_code = 0
     try:
         args = parse_arguments()
+        setup_logging(args.log_level)
         
-        # Set logging level
-        logging.getLogger().setLevel(getattr(logging, args.log_level))
-        
-        # Create and run extractor
         extractor = VideoFrameExtractor(
-            root_path=args.root_path,
-            out_path=args.out_path,
-            skip_frame=args.skip,
-            jpg_quality=args.jpg_quality,
-            workers=args.workers,
-            use_ffmpeg=not args.no_ffmpeg,
-            validate_frames=not args.no_validation
+            root_path=args.root_path, out_path=args.out_path, skip_frame=args.skip,
+            jpg_quality=args.jpg_quality, workers=args.workers,
+            use_ffmpeg=not args.no_ffmpeg, validate_frames=not args.no_validation
         )
         
         stats = extractor.extract_all_frames()
         
-        # Exit with appropriate code
-        if stats['processed_videos'] == 0:
-            exit(1)  # No videos processed
-        elif stats['processed_videos'] < stats['total_videos']:
-            exit(2)  # Some videos failed
-        else:
-            exit(0)  # All videos processed successfully
-            
-    except KeyboardInterrupt:
-        print("\nOperation cancelled by user")
-        exit(130)
-    except Exception as e:
-        print(f"Fatal error: {str(e)}")
-        exit(1)
+        if not stats: exit_code = 1
+        elif stats.get('processed_videos', 0) < stats.get('total_videos', 0): exit_code = 2
 
+    except KeyboardInterrupt:
+        print("\nOperation cancelled by user.", file=sys.stderr)
+        exit_code = 130
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Fatal error: {str(e)}", exc_info=True)
+        exit_code = 1
+    finally:
+        # **CRITICAL:** This block ensures the terminal is restored.
+        # It runs on both normal exit and exceptions.
+        if sys.platform != "win32":
+            # This command restores terminal settings on Linux/macOS.
+            os.system('stty echo')
+        sys.exit(exit_code)
+
+def parse_arguments():
+    """Parse and validate command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Extract frames from video files with consistent naming per video",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('root_path', help='Input directory containing video files')
+    parser.add_argument('out_path', help='Output directory for extracted frames')
+    parser.add_argument('--skip', type=int, default=5, help='Number of frames to skip')
+    parser.add_argument('--jpg_quality', type=int, default=80, help='JPEG quality (1-100)')
+    parser.add_argument('--workers', type=int, default=None, help='Number of worker threads')
+    parser.add_argument('--no-ffmpeg', action='store_true', help='Disable FFmpeg usage')
+    parser.add_argument('--no-validation', action='store_true', help='Disable frame validation')
+    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], default='INFO', help='Logging level')
+    return parser.parse_args()
 
 if __name__ == '__main__':
     main()

@@ -37,7 +37,7 @@ def init_models(cfg):
 def load_image_paths(img_dir):
     batch_paths = []
     print(f"Total images to process: {len(os.listdir(img_dir))}")
-    for img_name in tqdm(os.listdir(img_dir)):
+    for img_name in os.listdir(img_dir):
         if not img_name.endswith(".jpg") and not img_name.endswith(".png") and \
            not img_name.endswith(".jpeg") and not img_name.endswith(".JPG") and \
            not img_name.endswith(".JPEG") and not img_name.endswith(".PNG"):
@@ -55,7 +55,7 @@ def main(cfg_path):
     models = init_models(cfg)
     img_paths = load_image_paths(cfg['input_img_dir'])
 
-    for img_path in img_paths:
+    for img_path in tqdm(img_paths):
         img = cv2.imread(img_path)
         if img is None:
             print(f"Failed to read image {img_path}")
