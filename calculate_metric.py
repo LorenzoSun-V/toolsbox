@@ -49,6 +49,11 @@ def main():
     except argparse.ArgumentTypeError as e:
         parser.error(str(e)) # argparse 会处理这个错误并退出
 
+    assert osp.exists(args.pred_path), f"Prediction path does not exist: {args.pred_path}"
+    assert osp.exists(args.gt_path), f"Ground truth path does not exist: {args.gt_path}"
+    assert osp.exists(args.val_list_path), f"Validation list path does not exist: {args.val_list_path}"
+    assert osp.exists(args.names_file), f"Names file path does not exist: {args.names_file}"
+
     print(f"Running task: {args.task}")
     print(f"Prediction Path: {args.pred_path}")
     print(f"Ground Truth Path: {args.gt_path}")
