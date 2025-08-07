@@ -1,0 +1,1 @@
+## 该脚本用于 yolov8obb、yolov8-sahi、yolo11obb、yolo11-sahi ONNX模型转换，然后通过trtexec转换为TensorRT模型 
