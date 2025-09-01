@@ -1,0 +1,9 @@
+input_img_dir: /data/lorenzo/temp/test/facility
+
+models:
+  - model_path: /data/nofar/model_version/facility/obb_device_cls14_v0.1.3/model8obb_b64s_20250729_obb_device_cls14_v0.1.3_b64.transd_fp16.bin
+    model_type: yolov8obb
+    class_names: ["wind", "mh", "qp", "wgp", "wgd", "hx", "cz", "pdx", "yrw", "whg", "wgk", "gp", "gd", "qpfall"]
+    class_filter: ["wind", "mh", "qp", "wgp", "wgd", "hx", "cz", "pdx", "yrw", "whg", "wgk", "gp", "gd", "qpfall"]
+    conf_threshold: 0.25
+    nms_threshold: 0.45

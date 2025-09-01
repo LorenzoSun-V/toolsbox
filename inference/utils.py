@@ -147,6 +147,53 @@ def detbox_to_shape_rectangle(obj, class_names):
     }
 
 
+def detbox_to_shape_rotation(obj, class_names):
+    """
+    将您的特定 OBB (旋转框) 检测结果转换为 Anylabeling 的 'rotation' 格式。
+    obj: [x_top_left, y_top_left, w, h, confidence, class_id, radian]
+    """
+    x_tl, y_tl, w, h, score, class_id, radian = obj
+    x_tl, y_tl, w, h, score, class_id, radian = float(x_tl), float(y_tl), float(w), float(h), float(score), int(class_id), float(radian)
+
+    # 根据左上角点、宽高和旋转角度计算四个顶点
+    center_x = x_tl + w / 2
+    center_y = y_tl + h / 2
+    
+    cos_r = math.cos(radian)
+    sin_r = math.sin(radian)
+
+    corners = np.array([
+            [-w/2, -h/2],
+            [w/2, -h/2], 
+            [w/2, h/2],
+            [-w/2, h/2]
+        ])
+
+    rotated_corners_np = np.array([
+            [cos_r * corner[0] - sin_r * corner[1] + center_x,
+             sin_r * corner[0] + cos_r * corner[1] + center_y]
+            for corner in corners
+        ], dtype=np.float32)
+    
+    points = rotated_corners_np.tolist()
+
+    label = class_names[class_id] if class_id < len(class_names) else str(class_id)
+    
+    return {
+        "kie_linking": [],
+        "label": label,
+        "score": score,
+        "points": points,
+        "group_id": None,
+        "description": None,
+        "difficult": False,
+        "shape_type": "rotation", # 根据您的JSON示例，使用 'rotation'
+        "flags": {},
+        "attributes": {},
+        "direction": radian # 您可以选在在此处保留原始角度信息
+    }
+
+
 def save_anylabeling_json(img_path, shapes, out_dir, img_shape):
     json_data = {
         "version": "3.0.0",
