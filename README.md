@@ -74,9 +74,15 @@ python preprocessing/merge_obb_dataset.py
 
     hbb预标注:
 
-    请参考[multi_hbb_inference_prelabel_trt.py](./multi_hbb_inference_prelabel_trt.py)文件，运行脚本。
+    请参考[multi_inference_prelabel_trt.py](./multi_inference_prelabel_trt.py)文件和[hbb_prelabel_trt.yaml](./configs/hbb_prelabel_trt.yaml)，运行脚本。
     ```
-    python multi_hbb_inference_prelabel_trt.py inference/model_config.yaml
+    python multi_inference_prelabel_trt.py configs/hbb_prelabel_trt.yaml
+    ```
+
+    obb预标注:
+    请参考[multi_inference_prelabel_trt.py](./multi_inference_prelabel_trt.py)文件和[obb_prelabel_trt_cls14.yaml](./configs/obb_prelabel_trt_cls14.yaml)，运行脚本。
+    ```
+    python multi_inference_prelabel_trt.py configs/obb_prelabel_trt_cls14.yaml
     ```
 
 
